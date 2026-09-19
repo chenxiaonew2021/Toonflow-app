@@ -30,6 +30,7 @@ export default router.post(
       z.object({
         type: z.string(),
         base64: z.string(),
+        role: z.enum(["first_frame", "last_frame"]).optional(),
       }),
     ),
   }),

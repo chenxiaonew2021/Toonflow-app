@@ -52,7 +52,21 @@ export default async (knex: Knex): Promise<void> => {
     state: "生成失败",
     reason: "软件退出导致失败",
   });
-  await db("o_video").where("state", "生成中").update({
+  // A remote H3 task survives this process. Leave its local video pending so
+  // startup recovery can query the existing task instead of inventing a failure.
+  const pendingVideoTasks = await db("o_tasks").where({ taskClass: "视频生成", state: "进行中" }).select("id", "relatedObjects");
+  const h3VideoIds = pendingVideoTasks
+    .flatMap(row => {
+      try { const related = JSON.parse(row.relatedObjects || "{}"); return related.h3 && !related.h3.done && Number.isInteger(related.videoId) ? [related.videoId as number] : []; }
+      catch { return []; }
+    });
+  for (const task of pendingVideoTasks) {
+    try {
+      const related = JSON.parse(task.relatedObjects || "{}");
+      if (related.h3Preparation && !related.h3) await db("o_tasks").where("id", task.id).update({ state: "生成失败", reason: "素材上传中断，尚未提交 H3，请重试" });
+    } catch { /* Legacy records may contain plain text. */ }
+  }
+  await db("o_video").where("state", "生成中").whereNotIn("id", h3VideoIds).update({
     state: "生成失败",
     errorReason: "软件退出导致失败",
   });

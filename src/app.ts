@@ -15,6 +15,9 @@ import jwt from "jsonwebtoken";
 import socketInit from "@/socket/index";
 import { isEletron } from "@/utils/getPath";
 import { ensureThumbnail, ThumbnailSize } from "@/utils/image";
+import { startH3VideoSync, stopH3VideoSync } from "@/lib/h3VideoJobs";
+import { databaseReady } from "@/utils/db";
+import { startComfyVideoSync, stopComfyVideoSync } from "@/lib/comfyShortDrama";
 
 const app = express();
 const server = http.createServer(app);
@@ -45,6 +48,8 @@ async function checkPermissions() {
 
 export default async function startServe(randomPort: Boolean = false) {
   await checkPermissions();
+  await databaseReady;
+  await startComfyVideoSync();
 
   await u.writeVersion();
   const io = new Server(server, { cors: { origin: "*" } });
@@ -191,6 +196,7 @@ export default async function startServe(randomPort: Boolean = false) {
       const address = server.address();
       const realPort = typeof address === "string" ? address : address?.port;
       console.log(`[服务启动成功]: http://localhost:${realPort}`);
+      startH3VideoSync();
       resolve(realPort);
     });
   });
@@ -198,6 +204,8 @@ export default async function startServe(randomPort: Boolean = false) {
 
 // 支持await关闭
 export function closeServe(): Promise<void> {
+  stopComfyVideoSync();
+  stopH3VideoSync();
   return new Promise((resolve, reject) => {
     if (server) {
       server.close((err?: Error) => {

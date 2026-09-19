@@ -126,7 +126,7 @@ export default router.post(
       } else if (/seedance.*2[.\-]0/i.test(modelData)) {
         // seedance 2.0 / 2-0 系列
         fileName = "seedance2Multi-parameterMode.md";
-      } else if (mode === "startEndRequired" || mode === "endFrameOptional" || mode === "startFrameOptional") {
+      } else if (mode === "startEndRequired" || mode === "endFrameOptional" || mode === "startFrameOptional" || mode === "startEndOptional") {
         // body.mode 为首尾帧相关 => 通用首尾帧模式
         fileName = "universalFirstAndLastFrameMode.md";
       } else if (typeof mode === "string" && mode.startsWith('["') && mode.endsWith('"]')) {

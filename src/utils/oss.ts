@@ -85,7 +85,7 @@ class OSS {
       throw new Error(`${userRelPath} 不是文件`);
     }
 
-    // 获取文件扩展名并确定 MIME 类型
+    // 扩展名作为兼容回退；生成图片的存储后缀可能与实际编码不同。
     const ext = path.extname(userRelPath).toLowerCase();
     const mimeTypes: Record<string, string> = {
       ".jpg": "image/jpeg",
@@ -102,13 +102,19 @@ class OSS {
       ".mp3": "audio/mpeg",
     };
 
-    const mimeType = mimeTypes[ext];
+    let mimeType = mimeTypes[ext];
     if (!mimeType) {
       throw new Error(`不支持的图片格式: ${ext}。支持的格式: ${Object.keys(mimeTypes).join(", ")}`);
     }
 
     // 读取文件并转换为 base64
     const data = await fs.readFile(absPath);
+    if (mimeType.startsWith("image/")) {
+      // 只读取元信息，不转码：例如保存为 .jpg 的 PNG 仍须声明为 image/png。
+      // sharp 无法读取的旧格式（如 BMP/ICO）保留原有扩展名回退。
+      const metadata = await sharp(data).metadata().catch(() => undefined);
+      if (metadata?.format) mimeType = mimeTypes[`.${metadata.format}`] ?? mimeType;
+    }
     const base64 = data.toString("base64");
     // 返回完整的 Data URL
     return `data:${mimeType};base64,${base64}`;

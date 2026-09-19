@@ -110,12 +110,12 @@ async function getModelConfig(value: AiType | `${string}:${string}`) {
   return null;
 }
 
-async function getVendorTemplateFn(
+export async function getVendorTemplateFn(
   fnName: "textRequest",
   modelName: `${string}:${string}`,
 ): Promise<(think?: boolean, thinkLevel?: 0 | 1 | 2 | 3) => any>;
-async function getVendorTemplateFn(fnName: Exclude<FnName, "textRequest">, modelName: `${string}:${string}`): Promise<(input: any) => any>;
-async function getVendorTemplateFn(fnName: FnName, modelName: `${string}:${string}`): Promise<any> {
+export async function getVendorTemplateFn(fnName: Exclude<FnName, "textRequest">, modelName: `${string}:${string}`, hooks?: { queueH3Task?: (request: string) => Promise<string> }): Promise<(input: any) => any>;
+export async function getVendorTemplateFn(fnName: FnName, modelName: `${string}:${string}`, hooks?: { queueH3Task?: (request: string) => Promise<string> }): Promise<any> {
   const [id, name] = modelName.split(/:(.+)/);
   const vendorConfigData = await u.db("o_vendorConfig").where("id", id).first();
   if (!vendorConfigData) throw new Error(`未找到供应商配置 id=${id}`);
@@ -124,7 +124,8 @@ async function getVendorTemplateFn(fnName: FnName, modelName: `${string}:${strin
   if (!selectedModel) throw new Error(`未找到模型 ${name} id=${id}`);
   const code = u.vendor.getCode(id);
   const jsCode = transform(code, { transforms: ["typescript"] }).code;
-  const running = u.vm(jsCode);
+  const running = u.vm(jsCode, undefined, hooks);
+  if (hooks?.queueH3Task && running.supportsH3TaskQueue !== true) throw new Error("请更新 H3 供应商代码以启用持久任务同步");
   if (running.vendor) {
     Object.assign(running.vendor.inputValues, JSON.parse(vendorConfigData.inputValues ?? "{}"));
     running.vendor.models = modelList;
@@ -227,7 +228,7 @@ function referenceList2imageBase642(id: string, input: any) {
   return input;
 }
 
-export type ReferenceList = { type: "image"; base64: string } | { type: "audio"; base64: string } | { type: "video"; base64: string };
+export type ReferenceList = ({ type: "image"; base64: string } | { type: "audio"; base64: string } | { type: "video"; base64: string }) & { role?: "first_frame" | "last_frame" };
 
 interface ImageConfig {
   prompt: string;
@@ -276,6 +277,7 @@ type VideoMode =
   | "startEndRequired" //首尾帧（两张都得有）
   | "endFrameOptional" //首尾帧（尾帧可选）
   | "startFrameOptional" //首尾帧（首帧可选）
+  | "startEndOptional" //首帧和尾帧均可选
   | "text" //文本
   | (`videoReference:${number}` | `imageReference:${number}` | `audioReference:${number}`)[]; //多参考（数字代表限制数量）
 

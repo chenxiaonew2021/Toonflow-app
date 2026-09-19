@@ -301,12 +301,9 @@ function tosEndpoint(): string {
   return (vendor.inputValues.tosEndpoint || "").trim();
 }
 function tosAk(): string {
-  logger(vendor.inputValues.ak);
-
   return (vendor.inputValues.ak || "").trim();
 }
 function tosSk(): string {
-  logger(vendor.inputValues.sk);
   return (vendor.inputValues.sk || "").trim();
 }
 function hasCompleteTosConfig(): boolean {

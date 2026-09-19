@@ -14,11 +14,14 @@ import FormData from "form-data";
 import jsonwebtoken from "jsonwebtoken";
 import u from "@/utils";
 import crypto from "node:crypto";
-export default function runCode(code: string, vendor?: Record<string, any>) {
+import { postImageMultipart } from "@/lib/imageMultipart";
+import { uploadMediaFile } from "@/lib/mediaUpload";
+export default function runCode(code: string, vendor?: Record<string, any>, hooks: { queueH3Task?: (request: string) => Promise<string> } = {}) {
   code = code.replace(/export\s*\{\s*\};?/g, ""); // 去掉 export {} 以免沙盒环境报错
   // 创建一个沙盒
   const exports = {};
   const sandbox: Record<string, any> = {
+    ...hooks,
     createOpenAI,
     createDeepSeek,
     createZhipu,
@@ -37,6 +40,8 @@ export default function runCode(code: string, vendor?: Record<string, any>) {
     exports,
     axios,
     FormData,
+    postImageMultipart,
+    uploadMediaFile,
     logger,
     jsonwebtoken,
     crypto,

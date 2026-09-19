@@ -39,20 +39,31 @@ export default router.post(
       .db("o_videoTrack")
       .where("o_videoTrack.scriptId", scriptId)
       .andWhere("o_videoTrack.projectId", projectId)
-      .select("o_videoTrack.id as trackId","o_videoTrack.videoId");
+      .orderBy("o_videoTrack.id", "asc")
+      .select("o_videoTrack.id as trackId", "o_videoTrack.videoId");
     // 按轨道分组处理视频
     const video = await Promise.all(
-      trackRows.map(async (track) => {
-        const videoItems = await u.db("o_video").where("o_video.videoTrackId", track.trackId).andWhere("o_video.state", "生成成功").select("*");
+      trackRows.map(async (track, index) => {
+        const videoItems = await u
+          .db("o_video")
+          .where({ videoTrackId: track.trackId, projectId, scriptId })
+          .whereIn("state", ["生成成功", "已完成"])
+          .whereNotNull("filePath")
+          .whereNot("filePath", "")
+          .orderBy("time", "desc")
+          .orderBy("id", "desc")
+          .select("*");
         const videoList = await Promise.all(
           videoItems.map(async (v) => ({
             id: v.id,
+            time: v.time,
             filePath: v.filePath ? await u.oss.getFileUrl(v.filePath) : "",
             videoTrackId: v.videoTrackId,
           })),
         );
         return {
           id: track.trackId,
+          storyboardIndex: index + 1,
           videoId: track.videoId,
           video: videoList,
         };

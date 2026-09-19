@@ -7,6 +7,7 @@ const router = express.Router();
 
 interface VideoItem {
   id: number;
+  time?: number | null;
   src: string;
   state: "未生成" | "生成中" | "已完成" | "生成失败";
 }
@@ -152,11 +153,12 @@ export default router.post(
       );
     }
 
-    const trackData = await u.db("o_videoTrack").where({ projectId, scriptId });
-    const videoList = await u.db("o_video").whereIn(
-      "videoTrackId",
-      trackData.map((t) => t.id),
-    );
+    const trackData = await u.db("o_videoTrack").where({ projectId, scriptId }).orderBy("id", "asc");
+    const videoList = await u
+      .db("o_video")
+      .whereIn("videoTrackId", trackData.map((t) => t.id))
+      .orderBy("time", "desc")
+      .orderBy("id", "desc");
     const trackList: TrackItem[] = [];
     const trackIdMap = [...new Set<number>(trackData.map((t) => t.id!))];
     for (const trackId of trackIdMap) {
@@ -200,9 +202,10 @@ export default router.post(
             .filter((v) => v.videoTrackId === trackId)
             .map(async (v) => ({
               id: v.id!,
-              src: v.filePath ? await u.oss.getFileUrl(v.filePath) : "",
-              state: v.state === "已完成" ? "已完成" : v.state === "生成中" ? "生成中" : v.state === "生成失败" ? "生成失败" : "未生成",
-              errorReason: v?.errorReason ?? "",
+              time: v.time,
+              src: v.filePath && ["生成成功", "已完成"].includes(v.state ?? "") ? await u.oss.getFileUrl(v.filePath) : "",
+              state: ["生成成功", "已完成"].includes(v.state ?? "") ? "已完成" : v.state === "生成中" ? "生成中" : v.state === "生成失败" ? "生成失败" : "未生成",
+              errorReason: ["生成成功", "已完成"].includes(v.state ?? "") ? "" : v?.errorReason ?? "",
             })),
         ),
       });

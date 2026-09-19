@@ -5,12 +5,15 @@ import { v4 as uuidv4 } from "uuid";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
 import { ReferenceList } from "@/utils/ai";
+import { generateWorkbenchVideo } from "@/lib/generateWorkbenchVideo";
+import { COMFY_DRAMA_MODEL } from "@/lib/comfyShortDrama";
 const router = express.Router();
 
 type Type = "imageReference" | "startImage" | "endImage" | "videoReference" | "audioReference";
 interface UploadItem {
   fileType: "image" | "video" | "audio";
   type: Type;
+  role?: "first_frame" | "last_frame";
   sources?: "assets" | "storyboard";
   id?: number;
   src?: string;
@@ -27,6 +30,7 @@ export default router.post(
       z.object({
         id: z.number(),
         sources: z.string(),
+        role: z.enum(["first_frame", "last_frame"]).optional(),
       }),
     ),
     prompt: z.string(),
@@ -50,11 +54,11 @@ export default router.post(
     const ratio = await u.db("o_project").select("videoRatio").where("id", projectId).first();
     const videoPath = `/${projectId}/video/${uuidv4()}.mp4`; //视频保存路径
     //查询出图片数据
-    const images = await Promise.all(
+    const images = model === COMFY_DRAMA_MODEL ? [] : await Promise.all(
       uploadData.map(async (item: UploadItem) => {
         if (item.sources === "storyboard") {
           const filePath = await u.db("o_storyboard").where("id", item.id).select("filePath").first();
-          return { path: filePath?.filePath, sources: "storyBoard" };
+          return { path: filePath?.filePath, sources: "storyBoard", role: item.role };
         }
         if (item.sources === "assets") {
           const filePath = await u
@@ -63,7 +67,7 @@ export default router.post(
             .leftJoin("o_image", "o_assets.imageId", "o_image.id")
             .select("o_image.filePath", "o_image.type")
             .first();
-          return { path: filePath?.filePath, sources: filePath.type };
+          return { path: filePath?.filePath, sources: filePath.type, role: item.role };
         }
       }),
     );
@@ -71,7 +75,7 @@ export default router.post(
     const base64 = await Promise.all(
       images.map(async (item) => {
         if (!item) return null;
-        return { base64: await u.oss.getImageBase64(item.path), type: item.sources == "audio" ? "audio" : "image" };
+        return { base64: await u.oss.getImageBase64(item.path), type: item.sources == "audio" ? "audio" : item.sources == "video" ? "video" : "image", ...(item.role ? { role: item.role } : {}) };
       }),
     );
     //新增
@@ -84,41 +88,14 @@ export default router.post(
       videoTrackId: trackId,
     });
     res.status(200).send(success(videoId));
-    const relatedObjects = {
-      projectId,
-      videoId,
-      scriptId,
-      type: "视频",
-    };
-    const aiVideo = u.Ai.Video(model);
-    aiVideo
-      .run(
-        {
-          prompt,
-          referenceList: base64.filter(Boolean) as ReferenceList[],
-          mode: modeData.length > 0 ? modeData : mode,
-          duration,
-          aspectRatio: (ratio?.videoRatio as "16:9" | "9:16") || "16:9",
-          resolution,
-          audio,
-        },
-        {
-          projectId,
-          taskClass: "视频生成",
-          describe: "根据提示词生成视频",
-          relatedObjects: JSON.stringify(relatedObjects),
-        },
-      )
-      .then(async () => await aiVideo.save(videoPath))
-      .then(async () => await u.db("o_video").where("id", videoId).update({ state: "生成成功" }))
-      .catch(async (error: any) => {
-        await u
-          .db("o_video")
-          .where("id", videoId)
-          .update({
-            state: "生成失败",
-            errorReason: u.error(error).message,
-          });
-      });
+    void generateWorkbenchVideo(model, {
+      prompt,
+      referenceList: base64.filter(Boolean) as ReferenceList[],
+      mode: modeData.length > 0 ? modeData : mode,
+      duration,
+      aspectRatio: (ratio?.videoRatio as "16:9" | "9:16") || "16:9",
+      resolution,
+      audio,
+    }, { videoId, videoPath, projectId, scriptId, uploadData });
   },
 );

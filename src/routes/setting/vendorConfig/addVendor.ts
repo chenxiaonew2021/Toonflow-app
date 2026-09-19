@@ -42,7 +42,7 @@ const vendorConfigSchema = z.object({
         type: z.literal("video"),
         mode: z.array(
           z.union([
-            z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "text", "audioReference", "videoReference"]),
+            z.enum(["singleImage", "startEndRequired", "endFrameOptional", "startFrameOptional", "startEndOptional", "text", "audioReference", "videoReference"]),
             z.array(z.string().regex(/^(videoReference|imageReference|audioReference):\d+$/)),
           ]),
         ),
